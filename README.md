@@ -19,6 +19,12 @@ Le projet rassemble deux niveaux de modelisation complementaires :
 
 Les deux scripts produisent automatiquement des figures, des fichiers de log et, selon le mode choisi, des videos exportees dans le dossier `out/`.
 
+## Apercu visuel
+
+### Modele Vega avec separation de satellite
+
+![Modele Vega](out/images/modele_vega.png)
+
 ## Contenu du depot
 
 ```text
