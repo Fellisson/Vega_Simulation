@@ -492,7 +492,12 @@ function export_batch_video(data, metrics, cfg, paths)
 
     plot3(ax, data.x, data.y, data.z, '--', 'Color', [0.7 0.7 0.7], 'LineWidth', 1.1);
     hTrace = plot3(ax, data.x(1), data.y(1), data.z(1), 'r-', 'LineWidth', 2);
-    hCenter = plot3(ax, data.x(1), data.y(1), data.z(1), 'ro', 'MarkerFaceColor', 'r', 'MarkerSize', 7);
+    hBody = plot3(ax, NaN, NaN, NaN, 'Color', [0.08 0.20 0.82], 'LineWidth', 4);
+    hNose1 = plot3(ax, NaN, NaN, NaN, 'Color', [0.95 0.95 0.98], 'LineWidth', 2.5);
+    hNose2 = plot3(ax, NaN, NaN, NaN, 'Color', [0.95 0.95 0.98], 'LineWidth', 2.5);
+    hFin1 = plot3(ax, NaN, NaN, NaN, 'Color', [0.92 0.18 0.18], 'LineWidth', 2.2);
+    hFin2 = plot3(ax, NaN, NaN, NaN, 'Color', [0.92 0.18 0.18], 'LineWidth', 2.2);
+    hCenter = plot3(ax, data.x(1), data.y(1), data.z(1), 'ro', 'MarkerFaceColor', 'r', 'MarkerSize', 6);
     hSatTrace = plot3(ax, NaN, NaN, NaN, '--', 'Color', sat_color, 'LineWidth', 2.2);
     hSat = plot3(ax, NaN, NaN, NaN, 'p', 'Color', sat_color, 'MarkerFaceColor', sat_color, 'MarkerSize', 10);
     hSatLabel = text(ax, NaN, NaN, NaN, 'Satellite deploye', 'Color', sat_color, ...
@@ -518,10 +523,19 @@ function export_batch_video(data, metrics, cfg, paths)
     N = numel(data.t);
     step = max(cfg.min_step, ceil(N / cfg.capture_divisor));
     frame_indices = unique([1:step:N, N]);
+    L = max(rocket.height * 0.36, 9.0);
+    W = max(rocket.body_diameter * 0.60, 1.8);
 
     for idx = 1:numel(frame_indices)
         k = frame_indices(idx);
+        R = eulerZYX(data.psi(k), data.theta(k), data.phi(k));
+        body_pts = rocket_wireframe_points([data.x(k); data.y(k); data.z(k)], R, L, W);
         set(hTrace, 'XData', data.x(1:k), 'YData', data.y(1:k), 'ZData', data.z(1:k));
+        set(hBody, 'XData', body_pts.body(1, :), 'YData', body_pts.body(2, :), 'ZData', body_pts.body(3, :));
+        set(hNose1, 'XData', body_pts.nose1(1, :), 'YData', body_pts.nose1(2, :), 'ZData', body_pts.nose1(3, :));
+        set(hNose2, 'XData', body_pts.nose2(1, :), 'YData', body_pts.nose2(2, :), 'ZData', body_pts.nose2(3, :));
+        set(hFin1, 'XData', body_pts.fin1(1, :), 'YData', body_pts.fin1(2, :), 'ZData', body_pts.fin1(3, :));
+        set(hFin2, 'XData', body_pts.fin2(1, :), 'YData', body_pts.fin2(2, :), 'ZData', body_pts.fin2(3, :));
         set(hCenter, 'XData', data.x(k), 'YData', data.y(k), 'ZData', data.z(k));
         if data.satellite_released
             valid_sat = isfinite(data.sat_x(1:k)) & isfinite(data.sat_y(1:k)) & isfinite(data.sat_z(1:k));
@@ -597,9 +611,12 @@ function fig = create_scene(data, cfg)
 
     handles.ax3 = ax3;
     handles.hTrace = plot3(ax3, NaN, NaN, NaN, 'r', 'LineWidth', 2);
-    handles.hBody1 = plot3(ax3, NaN, NaN, NaN, 'b', 'LineWidth', 3);
-    handles.hBody2 = plot3(ax3, NaN, NaN, NaN, 'k', 'LineWidth', 2);
-    handles.hCenter = plot3(ax3, x(1), y(1), z(1), 'ro', 'MarkerFaceColor', 'r', 'MarkerSize', 7);
+    handles.hBody = plot3(ax3, NaN, NaN, NaN, 'Color', [0.08 0.20 0.82], 'LineWidth', 4);
+    handles.hNose1 = plot3(ax3, NaN, NaN, NaN, 'Color', [0.95 0.95 0.98], 'LineWidth', 2.5);
+    handles.hNose2 = plot3(ax3, NaN, NaN, NaN, 'Color', [0.95 0.95 0.98], 'LineWidth', 2.5);
+    handles.hFin1 = plot3(ax3, NaN, NaN, NaN, 'Color', [0.92 0.18 0.18], 'LineWidth', 2.2);
+    handles.hFin2 = plot3(ax3, NaN, NaN, NaN, 'Color', [0.92 0.18 0.18], 'LineWidth', 2.2);
+    handles.hCenter = plot3(ax3, x(1), y(1), z(1), 'ro', 'MarkerFaceColor', 'r', 'MarkerSize', 6);
     handles.hThrust = quiver3(ax3, x(1), y(1), z(1), 0, 0, 0, 0, ...
         'Color', [0 0.5 0], 'LineWidth', 2, 'MaxHeadSize', 0.8);
     handles.hImpact = plot3(ax3, x(end), y(end), z(end), 'x', 'Color', [0.8 0.2 0.1], ...
@@ -701,8 +718,8 @@ function animate_scene(fig, data, metrics, cfg, paths)
     end
 
     rocket = vega_c_parameters();
-    L = max(rocket.height * 0.40, 8.0);
-    W = max(rocket.body_diameter * 0.75, 2.2);
+    L = max(rocket.height * 0.36, 9.0);
+    W = max(rocket.body_diameter * 0.60, 1.8);
     thrust_scale = 8e-5;
 
     xTrace = zeros(1, N);
@@ -724,17 +741,14 @@ function animate_scene(fig, data, metrics, cfg, paths)
         k = frame_indices(idx);
         R = eulerZYX(psi(k), theta(k), phi(k));
 
-        p1 = R * [-L; 0; 0];
-        p2 = R * [ L; 0; 0];
-        q1 = R * [0; -W; 0];
-        q2 = R * [0;  W; 0];
         c = [x(k); y(k); z(k)];
+        body_pts = rocket_wireframe_points(c, R, L, W);
 
-        P = [c + p1, c + p2];
-        Q = [c + q1, c + q2];
-
-        set(handles.hBody1, 'XData', P(1, :), 'YData', P(2, :), 'ZData', P(3, :));
-        set(handles.hBody2, 'XData', Q(1, :), 'YData', Q(2, :), 'ZData', Q(3, :));
+        set(handles.hBody, 'XData', body_pts.body(1, :), 'YData', body_pts.body(2, :), 'ZData', body_pts.body(3, :));
+        set(handles.hNose1, 'XData', body_pts.nose1(1, :), 'YData', body_pts.nose1(2, :), 'ZData', body_pts.nose1(3, :));
+        set(handles.hNose2, 'XData', body_pts.nose2(1, :), 'YData', body_pts.nose2(2, :), 'ZData', body_pts.nose2(3, :));
+        set(handles.hFin1, 'XData', body_pts.fin1(1, :), 'YData', body_pts.fin1(2, :), 'ZData', body_pts.fin1(3, :));
+        set(handles.hFin2, 'XData', body_pts.fin2(1, :), 'YData', body_pts.fin2(2, :), 'ZData', body_pts.fin2(3, :));
         set(handles.hCenter, 'XData', x(k), 'YData', y(k), 'ZData', z(k));
 
         xTrace(k) = x(k);
@@ -812,7 +826,7 @@ function animate_scene(fig, data, metrics, cfg, paths)
 end
 
 function assert_valid_scene_handles(handles)
-    required_fields = {'ax3', 'hTrace', 'hBody1', 'hBody2', 'hCenter', ...
+    required_fields = {'ax3', 'hTrace', 'hBody', 'hNose1', 'hNose2', 'hFin1', 'hFin2', 'hCenter', ...
         'hThrust', 'hImpact', 'hSatTrace', 'hSatellite', 'hSatLabel', 'txt', 'hAlt', 'hSpeed', 'hPhi', ...
         'hTheta', 'hPsi', 'hMass', 'hThrustHist'};
 
@@ -860,10 +874,15 @@ function write_model_presentation(output_path)
         'montrer comment des donnees techniques issues d''un lanceur reel peuvent etre injectees dans un modele dynamique tridimensionnel, ' ...
         'afin d''observer l''influence conjointe de la poussee, de la masse variable, de l''attitude et de la gravite sur la trajectoire.\n\n']);
 
+    fprintf(fid, ['Dans la version actuelle du modele, une phase de separation simplifiee du satellite est introduite lorsque le lanceur atteint ' ...
+        'l''altitude cible. A cet instant, la charge utile est consideree comme deployee dans l''espace sur une trajectoire propre, tandis que ' ...
+        'le corps principal du lanceur poursuit une phase de retour balistique conduisant a sa retombee au sol. Cette extension permet de ' ...
+        'representer plus clairement la logique d''une mission spatiale elementaire, en distinguant le mobile deploye et le lanceur apres separation.\n\n']);
+
     fprintf(fid, ['Dans cette perspective, le modele Vega enrichit sensiblement la qualite de l''analyse. Il permet de discuter les performances ' ...
         'de vol sur une base plus concrete, tout en conservant une structure de simulation suffisamment simple pour etre interpretable. ' ...
         'Il constitue ainsi une transition pertinente entre un modele academique de projectile propulse et une representation plus proche ' ...
-        'des systemes de lancement reels.\n']);
+        'des systemes de lancement reels, incluant une mise en espace simplifiee de la charge utile.\n']);
 
     fclose(fid);
 end
@@ -1174,4 +1193,23 @@ function draw_tree(ax, xt, yt, zt)
     surf(ax, xt + 0.35 + sx * 0.55, yt - 0.15 + sy * 0.55, ...
         zt + trunk_h + 1.2 + sz * 0.65, ...
         'FaceColor', [0.20 0.56 0.20], 'EdgeColor', 'none', 'FaceAlpha', 0.92);
+end
+
+function pts = rocket_wireframe_points(c, R, L, W)
+    body_tail = c + R * [-L; 0; 0];
+    body_front = c + R * [0.50 * L; 0; 0];
+    nose_tip = c + R * [L; 0; 0];
+
+    nose_up = c + R * [0.50 * L; 0; 0.55 * W];
+    nose_down = c + R * [0.50 * L; 0; -0.55 * W];
+
+    fin_left_tip = c + R * [-0.82 * L; -0.95 * W; -0.20 * W];
+    fin_right_tip = c + R * [-0.82 * L; 0.95 * W; -0.20 * W];
+    fin_root = c + R * [-0.45 * L; 0; -0.10 * W];
+
+    pts.body = [body_tail, body_front];
+    pts.nose1 = [nose_up, nose_tip];
+    pts.nose2 = [nose_down, nose_tip];
+    pts.fin1 = [fin_left_tip, fin_root];
+    pts.fin2 = [fin_right_tip, fin_root];
 end
