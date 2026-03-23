@@ -1,0 +1,7 @@
+Le modele final 3D retenu dans ce travail correspond a une representation generique d'un vehicule propulse sans commande PID. Il ne cherche pas a reproduire un lanceur industriel particulier, mais a fournir une base de simulation simple, stable et interpretable pour l'etude de la trajectoire tridimensionnelle.
+
+Le vehicule considere mesure environ 6.0 metres de hauteur, pour un diametre de 0.60 metres et une masse initiale de 1800 kg. La propulsion est repartie en plusieurs phases successives afin de reproduire une ascension progressive, avec diminution de masse, variation d'attitude et transition vers une phase balistique simplifiee.
+
+Cette formulation a une vocation principalement pedagogique et scientifique. Elle permet d'illustrer l'effet combine de la poussee, de la gravite, de la trainee atmospherique et de l'attitude sur la trajectoire, tout en conservant des hypotheses suffisamment simples pour etre analysees dans un cadre academique.
+
+Ce modele constitue ainsi la version finale generique du projet en 3D sans PID. Il sert de base de comparaison pour les autres simulations et peut etre enrichi par la suite vers des profils reels plus complexes ou des lois de commande plus avancees.

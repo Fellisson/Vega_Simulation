@@ -1,0 +1,16 @@
+===== MODELE FINAL 3D =====
+Vehicule                : Modele final 3D (vehicule generique sans PID)
+Mode                    : video
+Temps de vol            : 19.0000 s
+Portee horizontale      : 2306.5173 m
+Impact X                : -1724.3541 m
+Impact Y                : 1531.8698 m
+Altitude maximale       : 12234.2974 m
+Vitesse maximale        : 1200.0000 m/s
+Vitesse finale          : 1200.0000 m/s
+Masse initiale          : 1800.0000 kg
+Masse finale            : 634.1667 kg
+Fin de simulation       : target_altitude_reached
+Export video            : oui
+Decor complet           : non
+============================

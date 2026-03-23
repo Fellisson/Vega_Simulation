@@ -1,0 +1,16 @@
+===== MODELE VEGA =====
+Vehicule                : Vega-C (profil simplifie inspire du reel)
+Mode                    : video
+Temps de vol            : 159.2500 s
+Portee horizontale      : 62334.9159 m
+Impact X                : 62329.9451 m
+Impact Y                : 787.1942 m
+Altitude maximale       : 250091.7628 m
+Vitesse maximale        : 3933.0544 m/s
+Vitesse finale          : 3933.0544 m/s
+Masse initiale          : 210000.0000 kg
+Masse finale            : 52337.3786 kg
+Fin de simulation       : target_altitude_reached
+Export video            : oui
+Decor complet           : non
+============================
