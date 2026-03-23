@@ -55,7 +55,8 @@ Principales caracteristiques :
 
 - vehicule multi-etages simplifie
 - parametres de masse, geometrie et poussee inspires du reel
-- profil d'ascension 3D avec altitude cible
+- profil d'ascension 3D avec separation de satellite
+- retombee balistique du lanceur apres largage
 - export des resultats en image, log et video
 
 ## Prerequis
@@ -135,10 +136,12 @@ Exemples de fichiers produits :
 
 ### Modele Vega
 
-- temps de vol : `159.25 s`
-- portee horizontale : `62334.92 m`
+- temps de vol : `362.50 s`
+- portee horizontale : `155217.61 m`
 - altitude maximale : `250091.76 m`
-- fin de simulation : `target_altitude_reached`
+- fin de simulation : `satellite_deployed_then_ground_impact`
+- separation du satellite : `159.25 s`
+- altitude de separation : `250091.76 m`
 
 ## Portee scientifique
 
@@ -146,6 +149,7 @@ Le depot permet de comparer :
 
 - une modelisation generique de vehicule propulse en 3D
 - une adaptation appliquee a un cas inspire du secteur spatial
+- un scenario de deploiement simplifie de satellite avec retombee du lanceur
 
 Il constitue ainsi une base utile pour :
 
