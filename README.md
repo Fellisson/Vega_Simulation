@@ -1,5 +1,8 @@
 # Vega_Simulation
 
+**Resume scientifique**  
+Ce depot presente deux simulations 3D sans PID sous MATLAB : un modele final generique et un modele inspire du lanceur Vega-C. Il permet d'analyser la dynamique d'un vehicule propulse, jusqu'au deploiement simplifie d'un satellite et a la retombee du lanceur.
+
 Simulation MATLAB de deux modeles 3D sans PID pour l'etude de la dynamique d'un vehicule propulse :
 
 - `modele_final_3D` : modele generique final
