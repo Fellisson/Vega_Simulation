@@ -50,6 +50,10 @@ function modele_vega(mode_name)
     fprintf('Temps de vol : %.2f s | Portee horizontale : %.2f m | Altitude max : %.2f m\n', ...
         metrics.flight_time, metrics.range_xy, metrics.max_altitude);
     fprintf('Fin de simulation : %s\n', metrics.termination_reason);
+    if metrics.satellite_released
+        fprintf('Satellite deploye a t = %.2f s | altitude = %.2f m\n', ...
+            metrics.satellite_release_time, metrics.satellite_release_altitude);
+    end
     if isfinite(metrics.invalid_index)
         fprintf('Premier index invalide detecte : %d\n', metrics.invalid_index);
     end
@@ -78,8 +82,19 @@ function cfg = build_config(mode_name)
     cfg.max_angular_rate = deg2rad(20);
     cfg.max_control_moment = 2.0e6;
     cfg.stop_before_avum = true;
-    cfg.stop_at_stage3_end = true;
+    cfg.stop_at_stage3_end = false;
     cfg.target_altitude = 250e3;
+    cfg.enable_satellite_release = true;
+    cfg.satellite_name = 'Satellite deploye';
+    cfg.deorbit_horizontal_scale = 0.35;
+    cfg.deorbit_vertical_speed = -250;
+    cfg.satellite_horizontal_scale = 1.05;
+    cfg.satellite_vertical_scale = 0.15;
+    cfg.satellite_gravity = 0.12;
+    cfg.satellite_min_altitude = 0.92 * cfg.target_altitude;
+    cfg.satellite_turn_rate = deg2rad(0.18);
+    cfg.satellite_color = [0.05 0.78 0.95];
+    cfg.satellite_label_duration = 12;
 
     switch cfg.mode_name
         case "debug"
@@ -183,6 +198,7 @@ function data = simulate_open_loop_3d(cfg)
     Tcmd = zeros(1, N);
     m_hist = zeros(1, N);
     stage_name = strings(1, N);
+    sat_x = NaN(1, N); sat_y = NaN(1, N); sat_z = NaN(1, N);
 
     theta_ref = zeros(1, N);
     psi_ref = zeros(1, N);
@@ -228,6 +244,15 @@ function data = simulate_open_loop_3d(cfg)
     impact_idx = N;
     termination_reason = "simulation_complete";
     invalid_index = NaN;
+    satellite_released = false;
+    satellite_release_idx = NaN;
+    satellite_release_time = NaN;
+    launcher_mass_after_release = NaN;
+    sat_vx = NaN;
+    sat_vy = NaN;
+    sat_vz = NaN;
+    sat_heading = NaN;
+    sat_speed_xy = NaN;
 
     for k = 2:N
         tk = t(k);
@@ -238,7 +263,7 @@ function data = simulate_open_loop_3d(cfg)
             break;
         end
 
-        if cfg.stop_before_avum && tk >= rocket.stage4.t_start
+        if cfg.stop_before_avum && tk >= rocket.stage4.t_start && ~satellite_released
             impact_idx = max(1, k - 1);
             termination_reason = "mission_profile_end";
             break;
@@ -249,6 +274,11 @@ function data = simulate_open_loop_3d(cfg)
         psi_ref_k = psi_ref(k);
 
         [Tcmd(k), current_mass, stage_info] = vega_c_thrust_mass(tk, rocket);
+        if satellite_released
+            Tcmd(k) = 0;
+            current_mass = launcher_mass_after_release;
+            stage_info = 'Retour balistique';
+        end
         m_hist(k) = current_mass;
         stage_name(k) = string(stage_info);
         if Tcmd(k) <= 0 && tk > rocket.t_stage3_end && z(k - 1) <= 0
@@ -298,6 +328,16 @@ function data = simulate_open_loop_3d(cfg)
         y(k) = y(k - 1) + vy(k) * dt;
         z(k) = z(k - 1) + vz(k) * dt;
 
+        if satellite_released
+            sat_heading = sat_heading + cfg.satellite_turn_rate * dt;
+            sat_vx = sat_speed_xy * cos(sat_heading);
+            sat_vy = sat_speed_xy * sin(sat_heading);
+            sat_vz = sat_vz - cfg.satellite_gravity * dt;
+            sat_x(k) = sat_x(k - 1) + sat_vx * dt;
+            sat_y(k) = sat_y(k - 1) + sat_vy * dt;
+            sat_z(k) = max(sat_z(k - 1) + sat_vz * dt, cfg.satellite_min_altitude);
+        end
+
         p(k) = p(k - 1) + omega_dot(1) * dt;
         q(k) = q(k - 1) + omega_dot(2) * dt;
         r(k) = r(k - 1) + omega_dot(3) * dt;
@@ -319,16 +359,37 @@ function data = simulate_open_loop_3d(cfg)
             break;
         end
 
-        if z(k) <= 0 && k > 20 && tk > 30
+        if z(k) <= 0 && k > 20 && tk > 30 && ~satellite_released
             z(k) = 0;
             impact_idx = k;
             termination_reason = "ground_impact";
             break;
         end
 
-        if z(k) >= cfg.target_altitude
+        if cfg.enable_satellite_release && ~satellite_released && z(k) >= cfg.target_altitude
+            satellite_released = true;
+            satellite_release_idx = k;
+            satellite_release_time = tk;
+            sat_x(k) = x(k);
+            sat_y(k) = y(k);
+            sat_z(k) = z(k);
+            sat_speed_xy = cfg.satellite_horizontal_scale * hypot(vx(k), vy(k));
+            sat_heading = atan2(vy(k), vx(k));
+            sat_vx = sat_speed_xy * cos(sat_heading);
+            sat_vy = sat_speed_xy * sin(sat_heading);
+            sat_vz = cfg.satellite_vertical_scale * vz(k);
+            launcher_mass_after_release = max(current_mass - rocket.payload_mass, rocket.stage4.dry + rocket.interstage_mass);
+            vx(k) = cfg.deorbit_horizontal_scale * vx(k);
+            vy(k) = cfg.deorbit_horizontal_scale * vy(k);
+            vz(k) = min(vz(k), cfg.deorbit_vertical_speed);
+            m_hist(k) = launcher_mass_after_release;
+            stage_name(k) = "Separation satellite";
+        end
+
+        if satellite_released && z(k) <= 0 && tk > satellite_release_time
+            z(k) = 0;
             impact_idx = k;
-            termination_reason = "target_altitude_reached";
+            termination_reason = "satellite_deployed_then_ground_impact";
             break;
         end
     end
@@ -350,6 +411,13 @@ function data = simulate_open_loop_3d(cfg)
     data.vehicle_name = rocket.name;
     data.termination_reason = termination_reason;
     data.invalid_index = invalid_index;
+    data.satellite_released = satellite_released;
+    data.satellite_release_idx = satellite_release_idx;
+    data.satellite_release_time = satellite_release_time;
+    data.satellite_name = cfg.satellite_name;
+    data.sat_x = sat_x(1:impact_idx);
+    data.sat_y = sat_y(1:impact_idx);
+    data.sat_z = sat_z(1:impact_idx);
 end
 
 function render_outputs(data, metrics, cfg, paths)
@@ -367,6 +435,7 @@ end
 
 function export_static_scene(data, metrics, cfg, paths)
     rocket = vega_c_parameters();
+    sat_color = cfg.satellite_color;
     fig = figure('Position', cfg.figure_position, 'Color', 'w', ...
         'Visible', 'off');
     ax = axes(fig);
@@ -381,6 +450,17 @@ function export_static_scene(data, metrics, cfg, paths)
     plot3(ax, data.x, data.y, data.z, 'r-', 'LineWidth', 2);
     plot3(ax, data.x(1), data.y(1), data.z(1), 'go', 'MarkerFaceColor', 'g', 'MarkerSize', 7);
     plot3(ax, data.x(end), data.y(end), data.z(end), 'rx', 'LineWidth', 2, 'MarkerSize', 10);
+    if data.satellite_released
+        valid_sat = isfinite(data.sat_x) & isfinite(data.sat_y) & isfinite(data.sat_z);
+        plot3(ax, data.sat_x(valid_sat), data.sat_y(valid_sat), data.sat_z(valid_sat), ...
+            '--', 'Color', sat_color, 'LineWidth', 2.2);
+        plot3(ax, data.sat_x(find(valid_sat, 1, 'last')), data.sat_y(find(valid_sat, 1, 'last')), ...
+            data.sat_z(find(valid_sat, 1, 'last')), 'p', 'Color', sat_color, ...
+            'MarkerFaceColor', sat_color, 'MarkerSize', 10);
+        text(ax, data.sat_x(data.satellite_release_idx), data.sat_y(data.satellite_release_idx), ...
+            data.sat_z(data.satellite_release_idx), 'Satellite deploye', ...
+            'Color', sat_color, 'FontWeight', 'bold', 'VerticalAlignment', 'bottom');
+    end
 
     xlim(ax, [min(data.x) - 3, max(data.x) + 3]);
     ylim(ax, [min(data.y) - 3, max(data.y) + 3]);
@@ -398,6 +478,7 @@ end
 
 function export_batch_video(data, metrics, cfg, paths)
     rocket = vega_c_parameters();
+    sat_color = cfg.satellite_color;
     fig = figure('Position', cfg.figure_position, 'Color', 'w', ...
         'Visible', 'off');
     ax = axes(fig);
@@ -412,6 +493,10 @@ function export_batch_video(data, metrics, cfg, paths)
     plot3(ax, data.x, data.y, data.z, '--', 'Color', [0.7 0.7 0.7], 'LineWidth', 1.1);
     hTrace = plot3(ax, data.x(1), data.y(1), data.z(1), 'r-', 'LineWidth', 2);
     hCenter = plot3(ax, data.x(1), data.y(1), data.z(1), 'ro', 'MarkerFaceColor', 'r', 'MarkerSize', 7);
+    hSatTrace = plot3(ax, NaN, NaN, NaN, '--', 'Color', sat_color, 'LineWidth', 2.2);
+    hSat = plot3(ax, NaN, NaN, NaN, 'p', 'Color', sat_color, 'MarkerFaceColor', sat_color, 'MarkerSize', 10);
+    hSatLabel = text(ax, NaN, NaN, NaN, 'Satellite deploye', 'Color', sat_color, ...
+        'FontWeight', 'bold', 'Visible', 'off');
     hText = text(ax, data.x(1), data.y(1), max(data.z) + 0.02 * max(max(data.z), 1), '', ...
         'FontWeight', 'bold', 'VerticalAlignment', 'bottom');
 
@@ -438,6 +523,20 @@ function export_batch_video(data, metrics, cfg, paths)
         k = frame_indices(idx);
         set(hTrace, 'XData', data.x(1:k), 'YData', data.y(1:k), 'ZData', data.z(1:k));
         set(hCenter, 'XData', data.x(k), 'YData', data.y(k), 'ZData', data.z(k));
+        if data.satellite_released
+            valid_sat = isfinite(data.sat_x(1:k)) & isfinite(data.sat_y(1:k)) & isfinite(data.sat_z(1:k));
+            set(hSatTrace, 'XData', data.sat_x(valid_sat), 'YData', data.sat_y(valid_sat), 'ZData', data.sat_z(valid_sat));
+            last_sat = find(valid_sat, 1, 'last');
+            if ~isempty(last_sat)
+                set(hSat, 'XData', data.sat_x(last_sat), 'YData', data.sat_y(last_sat), 'ZData', data.sat_z(last_sat));
+            end
+            if k >= data.satellite_release_idx && data.t(k) <= data.satellite_release_time + cfg.satellite_label_duration
+                set(hSatLabel, 'Position', [data.sat_x(data.satellite_release_idx), data.sat_y(data.satellite_release_idx), ...
+                    data.sat_z(data.satellite_release_idx)], 'Visible', 'on');
+            else
+                set(hSatLabel, 'Visible', 'off');
+            end
+        end
         set(hText, 'Position', [data.x(k), data.y(k), max(data.z) + 0.02 * max(max(data.z), 1)], ...
             'String', sprintf('t = %.2f s | z = %.2f m | portee = %.2f m', ...
             data.t(k), data.z(k), hypot(data.x(k), data.y(k))));
@@ -457,6 +556,7 @@ end
 function fig = create_scene(data, cfg)
     x = data.x; y = data.y; z = data.z;
     rocket = vega_c_parameters();
+    sat_color = cfg.satellite_color;
 
     fig = figure('Position', cfg.figure_position, 'Color', 'w', ...
         'Visible', figure_visibility(cfg.is_batch));
@@ -504,6 +604,11 @@ function fig = create_scene(data, cfg)
         'Color', [0 0.5 0], 'LineWidth', 2, 'MaxHeadSize', 0.8);
     handles.hImpact = plot3(ax3, x(end), y(end), z(end), 'x', 'Color', [0.8 0.2 0.1], ...
         'LineWidth', 2, 'MarkerSize', 10, 'Visible', 'off');
+    handles.hSatTrace = plot3(ax3, NaN, NaN, NaN, '--', 'Color', sat_color, 'LineWidth', 2.2);
+    handles.hSatellite = plot3(ax3, NaN, NaN, NaN, 'p', 'Color', sat_color, ...
+        'MarkerFaceColor', sat_color, 'MarkerSize', 10);
+    handles.hSatLabel = text(ax3, NaN, NaN, NaN, 'Satellite deploye', ...
+        'Color', sat_color, 'FontWeight', 'bold', 'Visible', 'off');
     handles.txt = text(ax3, xmax - 0.5, ymax - 0.5, zmax - 0.3, '', ...
         'HorizontalAlignment', 'right', 'VerticalAlignment', 'top', 'FontWeight', 'bold');
 
@@ -579,6 +684,7 @@ function animate_scene(fig, data, metrics, cfg, paths)
     tburn = data.tburn;
     mass = data.mass;
     stage_name = data.stage_name;
+    sat_x = data.sat_x; sat_y = data.sat_y; sat_z = data.sat_z;
     N = numel(t);
 
     vw = [];
@@ -640,6 +746,22 @@ function animate_scene(fig, data, metrics, cfg, paths)
         thrust_vec = R * [0; 0; thrust_scale * Tcmd(k)];
         set(handles.hThrust, 'XData', x(k), 'YData', y(k), 'ZData', z(k), ...
             'UData', thrust_vec(1), 'VData', thrust_vec(2), 'WData', thrust_vec(3));
+        if data.satellite_released
+            valid_sat = isfinite(sat_x(1:k)) & isfinite(sat_y(1:k)) & isfinite(sat_z(1:k));
+            set(handles.hSatTrace, 'XData', sat_x(valid_sat), 'YData', sat_y(valid_sat), ...
+                'ZData', sat_z(valid_sat));
+            last_sat = find(valid_sat, 1, 'last');
+            if ~isempty(last_sat)
+                set(handles.hSatellite, 'XData', sat_x(last_sat), 'YData', sat_y(last_sat), ...
+                    'ZData', sat_z(last_sat));
+            end
+            if k >= data.satellite_release_idx && t(k) <= data.satellite_release_time + cfg.satellite_label_duration
+                set(handles.hSatLabel, 'Position', [sat_x(data.satellite_release_idx), sat_y(data.satellite_release_idx), ...
+                    sat_z(data.satellite_release_idx)], 'Visible', 'on');
+            else
+                set(handles.hSatLabel, 'Visible', 'off');
+            end
+        end
 
         speed = sqrt(vx(k)^2 + vy(k)^2 + vz(k)^2);
         phase = flight_phase_label(t(k), tburn, k == N);
@@ -650,10 +772,10 @@ function animate_scene(fig, data, metrics, cfg, paths)
 
         set(handles.txt, 'String', sprintf(['Vehicule : %s\nEtage actif : %s\nt = %.2f s\nx = %.2f  y = %.2f  z = %.2f m\n' ...
             'phi = %.1f deg  theta = %.1f deg  psi = %.1f deg\n' ...
-            '|v| = %.2f m/s | %s\nPortee = %.2f m'], ...
+            '|v| = %.2f m/s | %s\nPortee = %.2f m\nSatellite : %s'], ...
             rocket.name, active_stage, ...
             t(k), x(k), y(k), z(k), rad2deg(phi(k)), rad2deg(theta(k)), ...
-            rad2deg(psi(k)), speed, phase, metrics.range_xy));
+            rad2deg(psi(k)), speed, phase, metrics.range_xy, logical_to_text(data.satellite_released && k >= data.satellite_release_idx)));
 
         set(handles.hAlt, 'XData', t(1:k), 'YData', z(1:k));
         set(handles.hSpeed, 'XData', t(1:k), 'YData', sqrt(vx(1:k).^2 + vy(1:k).^2 + vz(1:k).^2));
@@ -691,7 +813,7 @@ end
 
 function assert_valid_scene_handles(handles)
     required_fields = {'ax3', 'hTrace', 'hBody1', 'hBody2', 'hCenter', ...
-        'hThrust', 'hImpact', 'txt', 'hAlt', 'hSpeed', 'hPhi', ...
+        'hThrust', 'hImpact', 'hSatTrace', 'hSatellite', 'hSatLabel', 'txt', 'hAlt', 'hSpeed', 'hPhi', ...
         'hTheta', 'hPsi', 'hMass', 'hThrustHist'};
 
     for i = 1:numel(required_fields)
@@ -802,6 +924,15 @@ function metrics = compute_flight_metrics(data)
     metrics.termination_reason = data.termination_reason;
     metrics.invalid_index = data.invalid_index;
     metrics.last_valid_index = last_valid;
+    metrics.satellite_released = data.satellite_released;
+    metrics.satellite_release_time = data.satellite_release_time;
+    if data.satellite_released
+        metrics.satellite_release_altitude = data.z(data.satellite_release_idx);
+        metrics.satellite_release_range = hypot(data.x(data.satellite_release_idx), data.y(data.satellite_release_idx));
+    else
+        metrics.satellite_release_altitude = NaN;
+        metrics.satellite_release_range = NaN;
+    end
 end
 
 function write_metrics_log(log_path, metrics, cfg)
@@ -824,6 +955,12 @@ function write_metrics_log(log_path, metrics, cfg)
     fprintf(fid, 'Masse initiale          : %.4f kg\n', metrics.initial_mass);
     fprintf(fid, 'Masse finale            : %.4f kg\n', metrics.final_mass);
     fprintf(fid, 'Fin de simulation       : %s\n', metrics.termination_reason);
+    fprintf(fid, 'Satellite deploye       : %s\n', logical_to_text(metrics.satellite_released));
+    if metrics.satellite_released
+        fprintf(fid, 'Temps separation sat.   : %.4f s\n', metrics.satellite_release_time);
+        fprintf(fid, 'Altitude separation     : %.4f m\n', metrics.satellite_release_altitude);
+        fprintf(fid, 'Portee separation       : %.4f m\n', metrics.satellite_release_range);
+    end
     if isfinite(metrics.invalid_index)
         fprintf(fid, 'Premier index invalide  : %d\n', metrics.invalid_index);
     end
