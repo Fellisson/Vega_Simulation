@@ -66,6 +66,7 @@ Principales caracteristiques :
 - parametres de masse, geometrie et poussee inspires du reel
 - profil d'ascension 3D avec separation de satellite
 - retombee balistique du lanceur apres largage
+- poursuite de la trajectoire du satellite en espace apres l'impact du lanceur
 - export des resultats en image, log et video
 
 ## Prerequis
@@ -151,6 +152,7 @@ Exemples de fichiers produits :
 - fin de simulation : `satellite_deployed_then_ground_impact`
 - separation du satellite : `159.25 s`
 - altitude de separation : `250091.76 m`
+- satellite poursuivi visuellement en espace apres la retombee du lanceur
 
 ## Portee scientifique
 
