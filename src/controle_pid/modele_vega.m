@@ -248,6 +248,9 @@ function data = simulate_open_loop_3d(cfg)
     satellite_release_idx = NaN;
     satellite_release_time = NaN;
     launcher_mass_after_release = NaN;
+    launcher_impacted = false;
+    launcher_impact_idx = NaN;
+    launcher_impact_time = NaN;
     sat_vx = NaN;
     sat_vy = NaN;
     sat_vz = NaN;
@@ -256,6 +259,33 @@ function data = simulate_open_loop_3d(cfg)
 
     for k = 2:N
         tk = t(k);
+
+        if launcher_impacted
+            x(k) = x(k - 1);
+            y(k) = y(k - 1);
+            z(k) = 0;
+            vx(k) = 0;
+            vy(k) = 0;
+            vz(k) = 0;
+            p(k) = 0;
+            q(k) = 0;
+            r(k) = 0;
+            phi(k) = phi(k - 1);
+            theta(k) = theta(k - 1);
+            psi(k) = psi(k - 1);
+            Tcmd(k) = 0;
+            m_hist(k) = m_hist(k - 1);
+            stage_name(k) = "Lanceur au sol";
+
+            sat_heading = sat_heading + cfg.satellite_turn_rate * dt;
+            sat_vx = sat_speed_xy * cos(sat_heading);
+            sat_vy = sat_speed_xy * sin(sat_heading);
+            sat_vz = sat_vz - cfg.satellite_gravity * dt;
+            sat_x(k) = sat_x(k - 1) + sat_vx * dt;
+            sat_y(k) = sat_y(k - 1) + sat_vy * dt;
+            sat_z(k) = max(sat_z(k - 1) + sat_vz * dt, cfg.satellite_min_altitude);
+            continue;
+        end
 
         if cfg.stop_at_stage3_end && tk >= rocket.t_stage3_end
             impact_idx = max(1, k - 1);
@@ -388,9 +418,10 @@ function data = simulate_open_loop_3d(cfg)
 
         if satellite_released && z(k) <= 0 && tk > satellite_release_time
             z(k) = 0;
-            impact_idx = k;
+            launcher_impacted = true;
+            launcher_impact_idx = k;
+            launcher_impact_time = tk;
             termination_reason = "satellite_deployed_then_ground_impact";
-            break;
         end
     end
 
@@ -418,6 +449,9 @@ function data = simulate_open_loop_3d(cfg)
     data.sat_x = sat_x(1:impact_idx);
     data.sat_y = sat_y(1:impact_idx);
     data.sat_z = sat_z(1:impact_idx);
+    data.launcher_impacted = launcher_impacted;
+    data.launcher_impact_idx = launcher_impact_idx;
+    data.launcher_impact_time = launcher_impact_time;
 end
 
 function render_outputs(data, metrics, cfg, paths)
@@ -930,19 +964,30 @@ function metrics = compute_flight_metrics(data)
     last_valid = valid_idx(end);
     speed = sqrt(data.vx(valid_idx).^2 + data.vy(valid_idx).^2 + data.vz(valid_idx).^2);
 
-    metrics.flight_time = data.t(last_valid);
+    if data.launcher_impacted && isfinite(data.launcher_impact_idx)
+        metrics.flight_time = data.launcher_impact_time;
+        metrics.range_xy = hypot(data.x(data.launcher_impact_idx), data.y(data.launcher_impact_idx));
+        metrics.impact_x = data.x(data.launcher_impact_idx);
+        metrics.impact_y = data.y(data.launcher_impact_idx);
+        metrics.final_speed = norm([data.vx(data.launcher_impact_idx), data.vy(data.launcher_impact_idx), data.vz(data.launcher_impact_idx)]);
+    else
+        metrics.flight_time = data.t(last_valid);
+        metrics.range_xy = hypot(data.x(last_valid), data.y(last_valid));
+        metrics.impact_x = data.x(last_valid);
+        metrics.impact_y = data.y(last_valid);
+        metrics.final_speed = speed(end);
+    end
+
     metrics.max_altitude = max(data.z(valid_idx));
     metrics.max_speed = max(speed);
-    metrics.range_xy = hypot(data.x(last_valid), data.y(last_valid));
-    metrics.impact_x = data.x(last_valid);
-    metrics.impact_y = data.y(last_valid);
-    metrics.final_speed = speed(end);
     metrics.initial_mass = data.mass(1);
     metrics.final_mass = data.mass(last_valid);
     metrics.vehicle_name = data.vehicle_name;
     metrics.termination_reason = data.termination_reason;
     metrics.invalid_index = data.invalid_index;
     metrics.last_valid_index = last_valid;
+    metrics.launcher_impacted = data.launcher_impacted;
+    metrics.launcher_impact_time = data.launcher_impact_time;
     metrics.satellite_released = data.satellite_released;
     metrics.satellite_release_time = data.satellite_release_time;
     if data.satellite_released
